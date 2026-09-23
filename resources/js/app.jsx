@@ -7,9 +7,11 @@ function App() {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
     
-    // NOUVEAUX ÉTATS POUR LE PANIER
+    // États pour le panier et la navigation
     const [cart, setCart] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState('home'); // 'home' ou 'checkout'
+    const [orderPlaced, setOrderPlaced] = useState(false);
 
     useEffect(() => {
         fetch('/api/patisseries')
@@ -38,106 +40,138 @@ function App() {
         setCart(prevCart => {
             const existingItem = prevCart.find(item => item.id === product.id);
             if (existingItem) {
-                return prevCart.map(item => 
-                    item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-                );
+                return prevCart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
             return [...prevCart, { ...product, quantity: 1 }];
         });
-        setIsCartOpen(true); // Ouvre le panier quand on ajoute
+        setIsCartOpen(true);
     };
 
-    const removeFromCart = (productId) => {
-        setCart(prevCart => prevCart.filter(item => item.id !== productId));
-    };
-
+    const removeFromCart = (productId) => setCart(prevCart => prevCart.filter(item => item.id !== productId));
     const updateQuantity = (productId, newQuantity) => {
-        if (newQuantity === 0) {
-            removeFromCart(productId);
-            return;
-        }
-        setCart(prevCart => 
-            prevCart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item)
-        );
+        if (newQuantity === 0) { removeFromCart(productId); return; }
+        setCart(prevCart => prevCart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item));
     };
 
     const cartTotal = cart.reduce((total, item) => total + (item.prix * item.quantity), 0);
     const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
-    // -------------------------
 
-    if (loading) {
-        return <div style={styles.loading}>Loading sweetness...</div>;
+    const goToCheckout = () => {
+        setIsCartOpen(false);
+        setCurrentPage('checkout');
+        window.scrollTo(0, 0);
+    };
+
+    const handlePlaceOrder = (e) => {
+        e.preventDefault();
+        // Ici, on enverra plus tard les données à Laravel
+        setOrderPlaced(true);
+        setCart([]);
+        setCurrentPage('home');
+        window.scrollTo(0, 0);
+    };
+
+    if (loading) return <div style={styles.loading}>Loading sweetness...</div>;
+
+    // --- VUE CHECKOUT ---
+    if (currentPage === 'checkout') {
+        return (
+            <div style={styles.container}>
+                <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
+                
+                <section style={styles.checkoutSection}>
+                    <h2 style={styles.sectionTitle}>Checkout</h2>
+                    <div style={styles.checkoutGrid}>
+                        
+                        {/* Formulaire */}
+                        <form onSubmit={handlePlaceOrder} style={styles.checkoutForm}>
+                            <h3 style={styles.formTitle}>Delivery Details</h3>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Full Name</label>
+                                <input type="text" required style={styles.input} placeholder="John Doe" />
+                            </div>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Email Address</label>
+                                <input type="email" required style={styles.input} placeholder="john@example.com" />
+                            </div>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Delivery Address</label>
+                                <input type="text" required style={styles.input} placeholder="123 Baker Street, London" />
+                            </div>
+                            <button type="submit" style={styles.placeOrderBtn}>PLACE ORDER</button>
+                        </form>
+
+                        {/* Récapitulatif */}
+                        <div style={styles.orderSummary}>
+                            <h3 style={styles.formTitle}>Order Summary</h3>
+                            {cart.map(item => (
+                                <div key={item.id} style={styles.summaryItem}>
+                                    <div style={{flex: 1}}>
+                                        <p style={styles.summaryName}>{item.nom} <span style={{color: '#999', fontSize: '12px'}}>x{item.quantity}</span></p>
+                                    </div>
+                                    <p style={styles.summaryPrice}>${(item.prix * item.quantity).toFixed(2)}</p>
+                                </div>
+                            ))}
+                            <div style={styles.summaryTotal}>
+                                <span>Total</span>
+                                <span>${cartTotal.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <Footer />
+            </div>
+        );
     }
 
+    // --- VUE SUCCÈS ---
+    if (orderPlaced) {
+        return (
+            <div style={styles.container}>
+                <Header cartCount={0} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
+                <section style={styles.successSection}>
+                    <h1 style={styles.successTitle}>Thank you for your order!</h1>
+                    <p style={styles.successText}>Your delicious pastries are being prepared with love.</p>
+                    <button style={styles.heroBtn} onClick={() => setOrderPlaced(false)}>CONTINUE SHOPPING</button>
+                </section>
+                <Footer />
+            </div>
+        );
+    }
+
+    // --- VUE ACCUEIL (SHOP) ---
     return (
         <div style={styles.container}>
-            {/* Header */}
-            <header style={styles.header}>
-                <h1 style={styles.logo}>Pastell'Elo</h1>
-                <nav style={styles.nav}>
-                    <a href="#" style={styles.navLink}>HOME</a>
-                    <a href="#" style={styles.navLink}>SHOP</a>
-                    <a href="#" style={styles.navLink}>ABOUT</a>
-                    <a href="#" style={styles.navLink}>CONTACT</a>
-                </nav>
-                {/* Bouton Panier dans le Header */}
-                <button style={styles.cartBtn} onClick={() => setIsCartOpen(true)}>
-                    CART ({cartCount})
-                </button>
-            </header>
+            <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
 
-            {/* Hero Section */}
             <section style={styles.hero}>
                 <div style={styles.heroContent}>
                     <h2 style={styles.heroTitle}>Artisanal Bakery & Pastries</h2>
                     <p style={styles.heroSubtitle}>Freshly baked with love, delivered to your door.</p>
-                    <button style={styles.heroBtn}>SHOP NOW</button>
+                    <button style={styles.heroBtn} onClick={() => document.getElementById('shop').scrollIntoView({behavior: 'smooth'})}>SHOP NOW</button>
                 </div>
             </section>
 
-            {/* Products Section */}
-            <section style={styles.productsSection}>
+            <section id="shop" style={styles.productsSection}>
                 <h2 style={styles.sectionTitle}>Our Best Sellers</h2>
                 
                 <div style={styles.searchContainer}>
-                    <input 
-                        type="text"
-                        placeholder="Search for pastries..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={styles.searchInput}
-                    />
+                    <input type="text" placeholder="Search for pastries..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
                 </div>
 
                 <div style={styles.filterContainer}>
                     {categories.map(category => (
-                        <button 
-                            key={category}
-                            onClick={() => setSelectedCategory(category)}
-                            style={{
-                                ...styles.filterBtn,
-                                ...(selectedCategory === category ? styles.filterBtnActive : {})
-                            }}
-                        >
-                            {category}
-                        </button>
+                        <button key={category} onClick={() => setSelectedCategory(category)} style={{...styles.filterBtn, ...(selectedCategory === category ? styles.filterBtnActive : {})}}>{category}</button>
                     ))}
                 </div>
 
-                {filteredPatisseries.length === 0 && (
-                    <div style={styles.noResults}>
-                        <p>No pastries found. Try a different search!</p>
-                    </div>
-                )}
+                {filteredPatisseries.length === 0 && <div style={styles.noResults}><p>No pastries found. Try a different search!</p></div>}
 
                 <div style={styles.grid}>
                     {filteredPatisseries.map(patisserie => (
                         <div key={patisserie.id} style={styles.card}>
-                            <div style={styles.cardImage}>
-                                <span style={styles.emoji}>
-                                    {getEmoji(patisserie.categorie)}
-                                </span>
-                            </div>
+                            <div style={styles.cardImage}><span style={styles.emoji}>{getEmoji(patisserie.categorie)}</span></div>
                             <div style={styles.cardBody}>
                                 <h3 style={styles.cardTitle}>{patisserie.nom}</h3>
                                 <p style={styles.cardPrice}>${patisserie.prix}</p>
@@ -148,48 +182,36 @@ function App() {
                 </div>
             </section>
 
-            {/* Footer */}
-            <footer style={styles.footer}>
-                <p>© 2026 Pastell'Elo. All rights reserved.</p>
-            </footer>
+            <Footer />
 
-            {/* --- PANNEAU LATÉRAL DU PANIER (CART SIDEBAR) --- */}
+            {/* Cart Sidebar */}
             {isCartOpen && (
                 <>
                     <div style={styles.overlay} onClick={() => setIsCartOpen(false)}></div>
                     <div style={styles.cartSidebar}>
                         <div style={styles.cartHeader}>
                             <h2 style={styles.cartTitle}>Your Cart</h2>
-                            <button style={styles.closeBtn} onClick={() => setIsCartOpen(false)}></button>
+                            <button style={styles.closeBtn} onClick={() => setIsCartOpen(false)}>×</button>
                         </div>
-                        
                         <div style={styles.cartItems}>
-                            {cart.length === 0 ? (
-                                <p style={styles.emptyCart}>Your cart is empty.</p>
-                            ) : (
-                                cart.map(item => (
-                                    <div key={item.id} style={styles.cartItem}>
-                                        <div style={styles.cartItemInfo}>
-                                            <h4 style={styles.cartItemName}>{item.nom}</h4>
-                                            <p style={styles.cartItemPrice}>${item.prix}</p>
-                                        </div>
-                                        <div style={styles.quantityControls}>
-                                            <button style={styles.qtyBtn} onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</button>
-                                            <span style={styles.qtyText}>{item.quantity}</span>
-                                            <button style={styles.qtyBtn} onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
-                                        </div>
+                            {cart.length === 0 ? <p style={styles.emptyCart}>Your cart is empty.</p> : cart.map(item => (
+                                <div key={item.id} style={styles.cartItem}>
+                                    <div style={styles.cartItemInfo}>
+                                        <h4 style={styles.cartItemName}>{item.nom}</h4>
+                                        <p style={styles.cartItemPrice}>${item.prix}</p>
                                     </div>
-                                ))
-                            )}
+                                    <div style={styles.quantityControls}>
+                                        <button style={styles.qtyBtn} onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</button>
+                                        <span style={styles.qtyText}>{item.quantity}</span>
+                                        <button style={styles.qtyBtn} onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-
                         {cart.length > 0 && (
                             <div style={styles.cartFooter}>
-                                <div style={styles.totalRow}>
-                                    <span>Total</span>
-                                    <span style={styles.totalPrice}>${cartTotal.toFixed(2)}</span>
-                                </div>
-                                <button style={styles.checkoutBtn}>CHECKOUT</button>
+                                <div style={styles.totalRow}><span>Total</span><span style={styles.totalPrice}>${cartTotal.toFixed(2)}</span></div>
+                                <button style={styles.checkoutBtn} onClick={goToCheckout}>CHECKOUT</button>
                             </div>
                         )}
                     </div>
@@ -199,11 +221,28 @@ function App() {
     );
 }
 
+// --- COMPOSANTS RÉUTILISABLES ---
+function Header({ cartCount, onCartClick, onLogoClick }) {
+    return (
+        <header style={styles.header}>
+            <h1 style={styles.logo} onClick={onLogoClick} className="clickable-logo">Pastell'Elo</h1>
+            <nav style={styles.nav}>
+                <a href="#" style={styles.navLink}>HOME</a>
+                <a href="#" style={styles.navLink}>SHOP</a>
+                <a href="#" style={styles.navLink}>ABOUT</a>
+                <a href="#" style={styles.navLink}>CONTACT</a>
+            </nav>
+            <button style={styles.cartBtn} onClick={onCartClick}>CART ({cartCount})</button>
+        </header>
+    );
+}
+
+function Footer() {
+    return <footer style={styles.footer}><p>© 2026 Pastell'Elo. All rights reserved.</p></footer>;
+}
+
 function getEmoji(categorie) {
-    const emojis = {
-        'Eclairs': '🥐', 'Tarts': '🥧', 'Macarons': '🧁', 
-        'Cakes': '🎂', 'Cupcakes': '🧁', 'Viennoiseries': '🥐',
-    };
+    const emojis = { 'Eclairs': '🥐', 'Tarts': '🥧', 'Macarons': '🧁', 'Cakes': '🎂', 'Cupcakes': '🧁', 'Viennoiseries': '🥐' };
     return emojis[categorie] || '🍰';
 }
 
@@ -213,7 +252,7 @@ const styles = {
     loading: { padding: '100px', textAlign: 'center', fontSize: '20px', color: '#d4a373', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' },
     
     header: { backgroundColor: '#ffffff', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
-    logo: { fontFamily: "'Playfair Display', cursive", fontSize: '32px', fontStyle: 'italic', margin: 0, color: '#222222', fontWeight: '400' },
+    logo: { fontFamily: "'Playfair Display', cursive", fontSize: '32px', fontStyle: 'italic', margin: 0, color: '#222222', fontWeight: '400', cursor: 'pointer' },
     nav: { display: 'flex', gap: '30px' },
     navLink: { textDecoration: 'none', color: '#555555', fontWeight: '400', fontSize: '12px', letterSpacing: '2px', textTransform: 'uppercase', transition: 'color 0.3s' },
     cartBtn: { background: 'none', border: '1px solid #222', padding: '10px 20px', fontSize: '12px', letterSpacing: '1px', cursor: 'pointer', fontWeight: '500' },
@@ -246,12 +285,12 @@ const styles = {
     
     footer: { backgroundColor: '#ffffff', color: '#999999', textAlign: 'center', padding: '40px 20px', fontSize: '13px', borderTop: '1px solid #f0f0f0', letterSpacing: '1px' },
 
-    // --- STYLES DU PANIER ---
+    // Cart Styles
     overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 999 },
     cartSidebar: { position: 'fixed', top: 0, right: 0, width: '400px', height: '100%', backgroundColor: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.1)' },
     cartHeader: { padding: '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     cartTitle: { fontFamily: "'Playfair Display', serif", fontSize: '24px', margin: 0, fontWeight: '400' },
-    closeBtn: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' },
+    closeBtn: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#222' },
     cartItems: { flex: 1, overflowY: 'auto', padding: '20px' },
     emptyCart: { textAlign: 'center', color: '#999', marginTop: '50px' },
     cartItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #f9f9f9' },
@@ -264,20 +303,39 @@ const styles = {
     cartFooter: { padding: '20px', borderTop: '1px solid #f0f0f0' },
     totalRow: { display: 'flex', justifyContent: 'space-between', fontSize: '18px', marginBottom: '20px', fontWeight: '500' },
     totalPrice: { fontFamily: "'Playfair Display', serif" },
-    checkoutBtn: { width: '100%', backgroundColor: '#222222', color: 'white', border: 'none', padding: '15px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' }
+    checkoutBtn: { width: '100%', backgroundColor: '#222222', color: 'white', border: 'none', padding: '15px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' },
+
+    // Checkout Styles
+    checkoutSection: { maxWidth: '1000px', margin: '60px auto', padding: '0 20px' },
+    checkoutGrid: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '60px' },
+    checkoutForm: { display: 'flex', flexDirection: 'column', gap: '20px' },
+    formTitle: { fontFamily: "'Playfair Display', serif", fontSize: '24px', marginBottom: '20px', fontWeight: '400', borderBottom: '1px solid #f0f0f0', paddingBottom: '10px' },
+    inputGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    label: { fontSize: '12px', color: '#777', letterSpacing: '1px', textTransform: 'uppercase' },
+    input: { padding: '15px', border: '1px solid #e0e0e0', fontSize: '14px', fontFamily: "'Poppins', sans-serif", outline: 'none' },
+    placeOrderBtn: { backgroundColor: '#222222', color: 'white', border: 'none', padding: '18px', fontSize: '13px', fontWeight: '500', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', marginTop: '10px' },
+    orderSummary: { backgroundColor: '#f9f9f9', padding: '30px' },
+    summaryItem: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '14px' },
+    summaryName: { margin: 0 },
+    summaryPrice: { margin: 0, fontWeight: '500' },
+    summaryTotal: { display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e0e0e0', fontSize: '18px', fontWeight: '600' },
+
+    // Success Styles
+    successSection: { textAlign: 'center', padding: '100px 20px' },
+    successTitle: { fontFamily: "'Playfair Display', serif", fontSize: '48px', marginBottom: '20px', fontWeight: '400' },
+    successText: { fontSize: '18px', color: '#777', marginBottom: '40px' }
 };
 
-// Effets de survol
+// Hover effects
 const styleSheet = document.createElement("style");
 styleSheet.innerText = `
     .navLink:hover { color: #000000; }
-    .heroBtn:hover { background-color: #444444; }
+    .heroBtn:hover, .placeOrderBtn:hover, .checkoutBtn:hover { background-color: #444444; }
     .card:hover { border-color: #222; transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-    .addBtn:hover { background-color: #222222; color: white; }
+    .addBtn:hover, .cartBtn:hover { background-color: #222222; color: white; }
     .filterBtn:hover { border-color: #222; color: #222; }
-    .searchInput:focus { border-color: #222; }
-    .cartBtn:hover { background-color: #222; color: white; }
-    .checkoutBtn:hover { background-color: #444; }
+    .searchInput:focus, .input:focus { border-color: #222; }
+    .clickable-logo:hover { opacity: 0.7; }
 `;
 document.head.appendChild(styleSheet);
 
