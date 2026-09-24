@@ -1,0 +1,17 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PatisserieController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
+
+// Route pour récupérer les produits
+Route::get('/patisseries', [PatisserieController::class, 'index']);
+
+// Route pour créer une commande
+Route::post('/orders', [OrderController::class, 'store']);

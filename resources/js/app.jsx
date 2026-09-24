@@ -6,11 +6,9 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // États pour le panier et la navigation
     const [cart, setCart] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
-    const [currentPage, setCurrentPage] = useState('home'); // 'home' ou 'checkout'
+    const [currentPage, setCurrentPage] = useState('home');
     const [orderPlaced, setOrderPlaced] = useState(false);
 
     useEffect(() => {
@@ -21,7 +19,7 @@ function App() {
                 setLoading(false);
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error fetching products:', error);
                 setLoading(false);
             });
     }, []);
@@ -35,7 +33,6 @@ function App() {
         return matchCategory && matchSearch;
     });
 
-    // --- LOGIQUE DU PANIER ---
     const addToCart = (product) => {
         setCart(prevCart => {
             const existingItem = prevCart.find(item => item.id === product.id);
@@ -47,9 +44,11 @@ function App() {
         setIsCartOpen(true);
     };
 
-    const removeFromCart = (productId) => setCart(prevCart => prevCart.filter(item => item.id !== productId));
     const updateQuantity = (productId, newQuantity) => {
-        if (newQuantity === 0) { removeFromCart(productId); return; }
+        if (newQuantity <= 0) {
+            setCart(prevCart => prevCart.filter(item => item.id !== productId));
+            return;
+        }
         setCart(prevCart => prevCart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item));
     };
 
@@ -62,13 +61,51 @@ function App() {
         window.scrollTo(0, 0);
     };
 
-    const handlePlaceOrder = (e) => {
+    // --- FONCTION D'ENVOI DE COMMANDE (AVEC LE FIX CREDENTIALS) ---
+    const handlePlaceOrder = async (e) => {
         e.preventDefault();
-        // Ici, on enverra plus tard les données à Laravel
-        setOrderPlaced(true);
-        setCart([]);
-        setCurrentPage('home');
-        window.scrollTo(0, 0);
+        
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        console.log("CSRF Token trouvé:", token ? "OUI" : "NON");
+
+        const formData = new FormData(e.target);
+        const orderData = {
+            customer_name: formData.get('name'),
+            customer_email: formData.get('email'),
+            delivery_address: formData.get('address'),
+            cart: cart,
+            total: cartTotal
+        };
+
+        console.log("Données envoyées:", orderData);
+
+        try {
+            const response = await fetch('/api/orders', {
+                method: 'POST',
+                credentials: 'same-origin', // <--- LA LIGNE MAGIQUE QUI RÈGLE LE BUG
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(orderData)
+            });
+
+            const responseData = await response.json();
+            console.log("Réponse du serveur:", response.status, responseData);
+
+            if (response.ok) {
+                setOrderPlaced(true);
+                setCart([]);
+                setCurrentPage('home');
+                window.scrollTo(0, 0);
+            } else {
+                alert("Erreur: " + (responseData.message || "Données invalides"));
+            }
+        } catch (error) {
+            console.error('Network error:', error);
+            alert("Erreur de connexion au serveur.");
+        }
     };
 
     if (loading) return <div style={styles.loading}>Loading sweetness...</div>;
@@ -78,30 +115,25 @@ function App() {
         return (
             <div style={styles.container}>
                 <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
-                
                 <section style={styles.checkoutSection}>
                     <h2 style={styles.sectionTitle}>Checkout</h2>
                     <div style={styles.checkoutGrid}>
-                        
-                        {/* Formulaire */}
                         <form onSubmit={handlePlaceOrder} style={styles.checkoutForm}>
                             <h3 style={styles.formTitle}>Delivery Details</h3>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Full Name</label>
-                                <input type="text" required style={styles.input} placeholder="John Doe" />
+                                <input type="text" name="name" required style={styles.input} placeholder="John Doe" />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Email Address</label>
-                                <input type="email" required style={styles.input} placeholder="john@example.com" />
+                                <input type="email" name="email" required style={styles.input} placeholder="john@example.com" />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Delivery Address</label>
-                                <input type="text" required style={styles.input} placeholder="123 Baker Street, London" />
+                                <input type="text" name="address" required style={styles.input} placeholder="123 Baker Street" />
                             </div>
                             <button type="submit" style={styles.placeOrderBtn}>PLACE ORDER</button>
                         </form>
-
-                        {/* Récapitulatif */}
                         <div style={styles.orderSummary}>
                             <h3 style={styles.formTitle}>Order Summary</h3>
                             {cart.map(item => (
@@ -119,7 +151,6 @@ function App() {
                         </div>
                     </div>
                 </section>
-
                 <Footer />
             </div>
         );
@@ -144,7 +175,6 @@ function App() {
     return (
         <div style={styles.container}>
             <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
-
             <section style={styles.hero}>
                 <div style={styles.heroContent}>
                     <h2 style={styles.heroTitle}>Artisanal Bakery & Pastries</h2>
@@ -152,22 +182,17 @@ function App() {
                     <button style={styles.heroBtn} onClick={() => document.getElementById('shop').scrollIntoView({behavior: 'smooth'})}>SHOP NOW</button>
                 </div>
             </section>
-
             <section id="shop" style={styles.productsSection}>
                 <h2 style={styles.sectionTitle}>Our Best Sellers</h2>
-                
                 <div style={styles.searchContainer}>
                     <input type="text" placeholder="Search for pastries..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
                 </div>
-
                 <div style={styles.filterContainer}>
                     {categories.map(category => (
                         <button key={category} onClick={() => setSelectedCategory(category)} style={{...styles.filterBtn, ...(selectedCategory === category ? styles.filterBtnActive : {})}}>{category}</button>
                     ))}
                 </div>
-
-                {filteredPatisseries.length === 0 && <div style={styles.noResults}><p>No pastries found. Try a different search!</p></div>}
-
+                {filteredPatisseries.length === 0 && <div style={styles.noResults}><p>No pastries found.</p></div>}
                 <div style={styles.grid}>
                     {filteredPatisseries.map(patisserie => (
                         <div key={patisserie.id} style={styles.card}>
@@ -181,10 +206,7 @@ function App() {
                     ))}
                 </div>
             </section>
-
             <Footer />
-
-            {/* Cart Sidebar */}
             {isCartOpen && (
                 <>
                     <div style={styles.overlay} onClick={() => setIsCartOpen(false)}></div>
@@ -221,7 +243,6 @@ function App() {
     );
 }
 
-// --- COMPOSANTS RÉUTILISABLES ---
 function Header({ cartCount, onCartClick, onLogoClick }) {
     return (
         <header style={styles.header}>
@@ -246,34 +267,26 @@ function getEmoji(categorie) {
     return emojis[categorie] || '🍰';
 }
 
-// --- STYLES ---
 const styles = {
     container: { fontFamily: "'Poppins', sans-serif", backgroundColor: '#ffffff', color: '#333333', minHeight: '100vh', position: 'relative' },
     loading: { padding: '100px', textAlign: 'center', fontSize: '20px', color: '#d4a373', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' },
-    
     header: { backgroundColor: '#ffffff', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
     logo: { fontFamily: "'Playfair Display', cursive", fontSize: '32px', fontStyle: 'italic', margin: 0, color: '#222222', fontWeight: '400', cursor: 'pointer' },
     nav: { display: 'flex', gap: '30px' },
     navLink: { textDecoration: 'none', color: '#555555', fontWeight: '400', fontSize: '12px', letterSpacing: '2px', textTransform: 'uppercase', transition: 'color 0.3s' },
     cartBtn: { background: 'none', border: '1px solid #222', padding: '10px 20px', fontSize: '12px', letterSpacing: '1px', cursor: 'pointer', fontWeight: '500' },
-    
     hero: { backgroundColor: '#ffffff', padding: '80px 20px', textAlign: 'center' },
     heroTitle: { fontFamily: "'Playfair Display', serif", fontSize: '48px', marginBottom: '15px', color: '#222222', fontWeight: '400' },
     heroSubtitle: { fontSize: '18px', color: '#777777', marginBottom: '30px', fontWeight: '300' },
     heroBtn: { backgroundColor: '#222222', color: 'white', border: 'none', padding: '15px 40px', fontSize: '13px', fontWeight: '500', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' },
-    
     productsSection: { maxWidth: '1200px', margin: '60px auto', padding: '0 20px' },
     sectionTitle: { fontFamily: "'Playfair Display', serif", textAlign: 'center', fontSize: '36px', marginBottom: '30px', color: '#222222', fontWeight: '400' },
-    
     searchContainer: { maxWidth: '500px', margin: '0 auto 40px' },
     searchInput: { width: '100%', padding: '15px 20px', border: '1px solid #e0e0e0', fontSize: '14px', fontFamily: "'Poppins', sans-serif", outline: 'none' },
-    
     filterContainer: { display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '50px', flexWrap: 'wrap' },
     filterBtn: { padding: '10px 25px', border: '1px solid #e0e0e0', backgroundColor: 'transparent', color: '#777', borderRadius: '30px', cursor: 'pointer', fontSize: '12px', letterSpacing: '1.5px', textTransform: 'uppercase', fontFamily: "'Poppins', sans-serif" },
     filterBtnActive: { backgroundColor: '#222222', color: '#ffffff', borderColor: '#222222' },
-
     noResults: { textAlign: 'center', padding: '60px 20px', color: '#999', fontSize: '16px' },
-
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '40px' },
     card: { backgroundColor: '#ffffff', overflow: 'hidden', border: '1px solid #f0f0f0', transition: 'all 0.3s' },
     cardImage: { height: '250px', backgroundColor: '#f9f9f9', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -282,10 +295,7 @@ const styles = {
     cardTitle: { fontFamily: "'Playfair Display', serif", fontSize: '20px', margin: '0 0 10px 0', color: '#222222', fontWeight: '400' },
     cardPrice: { fontSize: '16px', color: '#555555', fontWeight: '400', marginBottom: '20px', letterSpacing: '1px' },
     addBtn: { backgroundColor: 'transparent', color: '#222222', border: '1px solid #222222', padding: '10px 25px', fontSize: '11px', fontWeight: '500', letterSpacing: '1.5px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.3s' },
-    
     footer: { backgroundColor: '#ffffff', color: '#999999', textAlign: 'center', padding: '40px 20px', fontSize: '13px', borderTop: '1px solid #f0f0f0', letterSpacing: '1px' },
-
-    // Cart Styles
     overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 999 },
     cartSidebar: { position: 'fixed', top: 0, right: 0, width: '400px', height: '100%', backgroundColor: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.1)' },
     cartHeader: { padding: '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
@@ -304,8 +314,6 @@ const styles = {
     totalRow: { display: 'flex', justifyContent: 'space-between', fontSize: '18px', marginBottom: '20px', fontWeight: '500' },
     totalPrice: { fontFamily: "'Playfair Display', serif" },
     checkoutBtn: { width: '100%', backgroundColor: '#222222', color: 'white', border: 'none', padding: '15px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' },
-
-    // Checkout Styles
     checkoutSection: { maxWidth: '1000px', margin: '60px auto', padding: '0 20px' },
     checkoutGrid: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '60px' },
     checkoutForm: { display: 'flex', flexDirection: 'column', gap: '20px' },
@@ -319,14 +327,11 @@ const styles = {
     summaryName: { margin: 0 },
     summaryPrice: { margin: 0, fontWeight: '500' },
     summaryTotal: { display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e0e0e0', fontSize: '18px', fontWeight: '600' },
-
-    // Success Styles
     successSection: { textAlign: 'center', padding: '100px 20px' },
     successTitle: { fontFamily: "'Playfair Display', serif", fontSize: '48px', marginBottom: '20px', fontWeight: '400' },
     successText: { fontSize: '18px', color: '#777', marginBottom: '40px' }
 };
 
-// Hover effects
 const styleSheet = document.createElement("style");
 styleSheet.innerText = `
     .navLink:hover { color: #000000; }
