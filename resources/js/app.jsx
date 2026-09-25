@@ -10,12 +10,14 @@ function App() {
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState('home');
     const [orderPlaced, setOrderPlaced] = useState(false);
-    
-    // NOUVEAUX ÉTATS POUR LA PAGE DÉTAIL
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [detailQty, setDetailQty] = useState(1);
+    
+    // NOUVEAU : État pour l'utilisateur connecté
+    const [currentUser, setCurrentUser] = useState(null);
 
     useEffect(() => {
+        // Charger les produits
         fetch('/api/patisseries')
             .then(response => response.json())
             .then(data => {
@@ -26,6 +28,14 @@ function App() {
                 console.error('Error fetching products:', error);
                 setLoading(false);
             });
+
+        // NOUVEAU : Charger l'utilisateur connecté
+        fetch('/api/user', { credentials: 'same-origin' })
+            .then(response => response.json())
+            .then(data => {
+                if (data) setCurrentUser(data);
+            })
+            .catch(error => console.error('Error fetching user:', error));
     }, []);
 
     const categories = ['All', ...new Set(patisseries.map(p => p.categorie))];
@@ -103,7 +113,6 @@ function App() {
         }
     };
 
-    // --- FONCTIONS POUR LA PAGE DÉTAIL ---
     const viewProductDetails = (product) => {
         setSelectedProduct(product);
         setDetailQty(1);
@@ -125,7 +134,7 @@ function App() {
     if (selectedProduct) {
         return (
             <div style={styles.container}>
-                <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => { backToShop(); setCurrentPage('home'); }} />
+                <Header currentUser={currentUser} cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => { backToShop(); setCurrentPage('home'); }} />
                 <section style={styles.detailSection}>
                     <button style={styles.backBtn} onClick={backToShop}>← Back to Shop</button>
                     <div style={styles.detailGrid}>
@@ -141,7 +150,6 @@ function App() {
                             <h1 style={styles.detailTitle}>{selectedProduct.nom}</h1>
                             <p style={styles.detailPrice}>${selectedProduct.prix}</p>
                             <p style={styles.detailDescription}>{selectedProduct.description}</p>
-                            
                             <div style={styles.detailActions}>
                                 <div style={styles.qtySelector}>
                                     <button style={styles.qtyBtn} onClick={() => setDetailQty(Math.max(1, detailQty - 1))}>-</button>
@@ -162,7 +170,7 @@ function App() {
     if (currentPage === 'checkout') {
         return (
             <div style={styles.container}>
-                <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
+                <Header currentUser={currentUser} cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
                 <section style={styles.checkoutSection}>
                     <h2 style={styles.sectionTitle}>Checkout</h2>
                     <div style={styles.checkoutGrid}>
@@ -170,11 +178,12 @@ function App() {
                             <h3 style={styles.formTitle}>Delivery Details</h3>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Full Name</label>
-                                <input type="text" name="name" required style={styles.input} placeholder="John Doe" />
+                                {/* NOUVEAU : Pré-remplir si connecté */}
+                                <input type="text" name="name" required style={styles.input} placeholder="John Doe" defaultValue={currentUser ? currentUser.name : ''} />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Email Address</label>
-                                <input type="email" name="email" required style={styles.input} placeholder="john@example.com" />
+                                <input type="email" name="email" required style={styles.input} placeholder="john@example.com" defaultValue={currentUser ? currentUser.email : ''} />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Delivery Address</label>
@@ -208,7 +217,7 @@ function App() {
     if (orderPlaced) {
         return (
             <div style={styles.container}>
-                <Header cartCount={0} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
+                <Header currentUser={currentUser} cartCount={0} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
                 <section style={styles.successSection}>
                     <h1 style={styles.successTitle}>Thank you for your order!</h1>
                     <p style={styles.successText}>Your delicious pastries are being prepared with love.</p>
@@ -222,7 +231,7 @@ function App() {
     // --- VUE ACCUEIL (SHOP) ---
     return (
         <div style={styles.container}>
-            <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
+            <Header currentUser={currentUser} cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => setCurrentPage('home')} />
             <section style={styles.hero}>
                 <div style={styles.heroContent}>
                     <h2 style={styles.heroTitle}>Artisanal Bakery & Pastries</h2>
@@ -243,7 +252,6 @@ function App() {
                 {filteredPatisseries.length === 0 && <div style={styles.noResults}><p>No pastries found.</p></div>}
                 <div style={styles.grid}>
                     {filteredPatisseries.map(patisserie => (
-                        // La carte entière est cliquable pour voir les détails
                         <div key={patisserie.id} style={styles.card} onClick={() => viewProductDetails(patisserie)} className="product-card-clickable">
                             <div style={styles.cardImage}>
                                 {patisserie.image ? (
@@ -256,7 +264,6 @@ function App() {
                                 <h3 style={styles.cardTitle}>{patisserie.nom}</h3>
                                 <p style={styles.cardDescription}>{patisserie.description}</p>
                                 <p style={styles.cardPrice}>${patisserie.prix}</p>
-                                {/* stopPropagation empêche d'ouvrir la page détail quand on clique sur le bouton panier */}
                                 <button style={styles.addBtn} onClick={(e) => { e.stopPropagation(); addToCart(patisserie); }}>ADD TO CART</button>
                             </div>
                         </div>
@@ -300,15 +307,28 @@ function App() {
     );
 }
 
-function Header({ cartCount, onCartClick, onLogoClick }) {
+// --- HEADER MODIFIÉ : Affiche My Account / Logout si connecté ---
+function Header({ currentUser, cartCount, onCartClick, onLogoClick }) {
     return (
         <header style={styles.header}>
             <h1 style={styles.logo} onClick={onLogoClick} className="clickable-logo">Pastell'Elo</h1>
             <nav style={styles.nav}>
-                <a href="#" style={styles.navLink}>HOME</a>
-                <a href="#" style={styles.navLink}>SHOP</a>
-                <a href="#" style={styles.navLink}>ABOUT</a>
-                <a href="#" style={styles.navLink}>CONTACT</a>
+                <a href="/" style={styles.navLink}>HOME</a>
+                <a href="/#shop" style={styles.navLink}>SHOP</a>
+                {currentUser ? (
+                    <>
+                        <a href="/account" style={styles.navLink}>MY ACCOUNT</a>
+                        <form method="POST" action="/logout" style={{ display: 'inline' }}>
+                            <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')} />
+                            <button type="submit" style={{...styles.navLink, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit'}}>LOGOUT</button>
+                        </form>
+                    </>
+                ) : (
+                    <>
+                        <a href="/login" style={styles.navLink}>LOGIN</a>
+                        <a href="/register" style={styles.navLink}>REGISTER</a>
+                    </>
+                )}
             </nav>
             <button style={styles.cartBtn} onClick={onCartClick}>CART ({cartCount})</button>
         </header>
@@ -320,7 +340,7 @@ function Footer() {
 }
 
 function getEmoji(categorie) {
-    const emojis = { 'Eclairs': '🥐', 'Tarts': '', 'Macarons': '🧁', 'Cakes': '', 'Cupcakes': '🧁', 'Viennoiseries': '🥐' };
+    const emojis = { 'Eclairs': '', 'Tarts': '', 'Macarons': '🧁', 'Cakes': '', 'Cupcakes': '🧁', 'Viennoiseries': '🥐' };
     return emojis[categorie] || '🍰';
 }
 
@@ -329,7 +349,7 @@ const styles = {
     loading: { padding: '100px', textAlign: 'center', fontSize: '20px', color: '#d4a373', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' },
     header: { backgroundColor: '#ffffff', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' },
     logo: { fontFamily: "'Playfair Display', cursive", fontSize: '32px', fontStyle: 'italic', margin: 0, color: '#222222', fontWeight: '400', cursor: 'pointer' },
-    nav: { display: 'flex', gap: '30px' },
+    nav: { display: 'flex', gap: '30px', alignItems: 'center' },
     navLink: { textDecoration: 'none', color: '#555555', fontWeight: '400', fontSize: '12px', letterSpacing: '2px', textTransform: 'uppercase', transition: 'color 0.3s' },
     cartBtn: { background: 'none', border: '1px solid #222', padding: '10px 20px', fontSize: '12px', letterSpacing: '1px', cursor: 'pointer', fontWeight: '500' },
     hero: { backgroundColor: '#ffffff', padding: '80px 20px', textAlign: 'center' },
@@ -389,11 +409,8 @@ const styles = {
     successSection: { textAlign: 'center', padding: '100px 20px' },
     successTitle: { fontFamily: "'Playfair Display', serif", fontSize: '48px', marginBottom: '20px', fontWeight: '400' },
     successText: { fontSize: '18px', color: '#777', marginBottom: '40px' },
-
-    // --- NOUVEAUX STYLES POUR LA PAGE DÉTAIL ---
     detailSection: { maxWidth: '1100px', margin: '60px auto', padding: '0 20px' },
     backBtn: { background: 'none', border: 'none', fontFamily: "'Poppins', sans-serif", fontSize: '14px', color: '#777', cursor: 'pointer', marginBottom: '40px', letterSpacing: '1px' },
-    'backBtn:hover': { color: '#222' },
     detailGrid: { display: 'flex', gap: '60px', flexWrap: 'wrap' },
     detailImageContainer: { flex: '1', minWidth: '300px', backgroundColor: '#f9f9f9', height: '500px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     detailImg: { width: '100%', height: '100%', objectFit: 'cover' },

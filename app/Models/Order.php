@@ -9,13 +9,14 @@ class Order extends Model
 {
     use HasFactory;
 
-    // CETTE PARTIE EST OBLIGATOIRE POUR CORRIGER L'ERREUR
+    // On autorise la modification de ces colonnes
     protected $fillable = [
         'customer_name',
         'customer_email',
         'delivery_address',
         'total_price',
-        'status'
+        'status',
+        'user_id' // <-- NOUVEAU : On autorise l'enregistrement de l'ID utilisateur
     ];
 
     public function items()
