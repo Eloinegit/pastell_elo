@@ -10,6 +10,10 @@ function App() {
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState('home');
     const [orderPlaced, setOrderPlaced] = useState(false);
+    
+    // NOUVEAUX ÉTATS POUR LA PAGE DÉTAIL
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [detailQty, setDetailQty] = useState(1);
 
     useEffect(() => {
         fetch('/api/patisseries')
@@ -33,13 +37,13 @@ function App() {
         return matchCategory && matchSearch;
     });
 
-    const addToCart = (product) => {
+    const addToCart = (product, qty = 1) => {
         setCart(prevCart => {
             const existingItem = prevCart.find(item => item.id === product.id);
             if (existingItem) {
-                return prevCart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+                return prevCart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + qty } : item);
             }
-            return [...prevCart, { ...product, quantity: 1 }];
+            return [...prevCart, { ...product, quantity: qty }];
         });
         setIsCartOpen(true);
     };
@@ -61,13 +65,9 @@ function App() {
         window.scrollTo(0, 0);
     };
 
-    // --- FONCTION D'ENVOI DE COMMANDE (AVEC LE FIX CREDENTIALS) ---
     const handlePlaceOrder = async (e) => {
         e.preventDefault();
-        
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        console.log("CSRF Token trouvé:", token ? "OUI" : "NON");
-
         const formData = new FormData(e.target);
         const orderData = {
             customer_name: formData.get('name'),
@@ -77,12 +77,10 @@ function App() {
             total: cartTotal
         };
 
-        console.log("Données envoyées:", orderData);
-
         try {
             const response = await fetch('/api/orders', {
                 method: 'POST',
-                credentials: 'same-origin', // <--- LA LIGNE MAGIQUE QUI RÈGLE LE BUG
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': token,
@@ -91,24 +89,74 @@ function App() {
                 body: JSON.stringify(orderData)
             });
 
-            const responseData = await response.json();
-            console.log("Réponse du serveur:", response.status, responseData);
-
             if (response.ok) {
                 setOrderPlaced(true);
                 setCart([]);
                 setCurrentPage('home');
                 window.scrollTo(0, 0);
             } else {
-                alert("Erreur: " + (responseData.message || "Données invalides"));
+                alert("Erreur lors de la commande.");
             }
         } catch (error) {
             console.error('Network error:', error);
-            alert("Erreur de connexion au serveur.");
+            alert("Erreur de connexion.");
         }
     };
 
+    // --- FONCTIONS POUR LA PAGE DÉTAIL ---
+    const viewProductDetails = (product) => {
+        setSelectedProduct(product);
+        setDetailQty(1);
+        window.scrollTo(0, 0);
+    };
+
+    const backToShop = () => {
+        setSelectedProduct(null);
+    };
+
+    const addToCartFromDetail = () => {
+        addToCart(selectedProduct, detailQty);
+        backToShop();
+    };
+
     if (loading) return <div style={styles.loading}>Loading sweetness...</div>;
+
+    // --- VUE DÉTAIL PRODUIT ---
+    if (selectedProduct) {
+        return (
+            <div style={styles.container}>
+                <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} onLogoClick={() => { backToShop(); setCurrentPage('home'); }} />
+                <section style={styles.detailSection}>
+                    <button style={styles.backBtn} onClick={backToShop}>← Back to Shop</button>
+                    <div style={styles.detailGrid}>
+                        <div style={styles.detailImageContainer}>
+                            {selectedProduct.image ? (
+                                <img src={`/${selectedProduct.image}`} alt={selectedProduct.nom} style={styles.detailImg} />
+                            ) : (
+                                <div style={styles.detailEmojiFallback}><span style={styles.detailEmoji}>{getEmoji(selectedProduct.categorie)}</span></div>
+                            )}
+                        </div>
+                        <div style={styles.detailInfo}>
+                            <span style={styles.detailCategory}>{selectedProduct.categorie}</span>
+                            <h1 style={styles.detailTitle}>{selectedProduct.nom}</h1>
+                            <p style={styles.detailPrice}>${selectedProduct.prix}</p>
+                            <p style={styles.detailDescription}>{selectedProduct.description}</p>
+                            
+                            <div style={styles.detailActions}>
+                                <div style={styles.qtySelector}>
+                                    <button style={styles.qtyBtn} onClick={() => setDetailQty(Math.max(1, detailQty - 1))}>-</button>
+                                    <span style={styles.qtyText}>{detailQty}</span>
+                                    <button style={styles.qtyBtn} onClick={() => setDetailQty(detailQty + 1)}>+</button>
+                                </div>
+                                <button style={styles.addBtnLarge} onClick={addToCartFromDetail}>ADD TO CART</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <Footer />
+            </div>
+        );
+    }
 
     // --- VUE CHECKOUT ---
     if (currentPage === 'checkout') {
@@ -195,12 +243,21 @@ function App() {
                 {filteredPatisseries.length === 0 && <div style={styles.noResults}><p>No pastries found.</p></div>}
                 <div style={styles.grid}>
                     {filteredPatisseries.map(patisserie => (
-                        <div key={patisserie.id} style={styles.card}>
-                            <div style={styles.cardImage}><span style={styles.emoji}>{getEmoji(patisserie.categorie)}</span></div>
+                        // La carte entière est cliquable pour voir les détails
+                        <div key={patisserie.id} style={styles.card} onClick={() => viewProductDetails(patisserie)} className="product-card-clickable">
+                            <div style={styles.cardImage}>
+                                {patisserie.image ? (
+                                    <img src={`/${patisserie.image}`} alt={patisserie.nom} style={styles.cardImg} />
+                                ) : (
+                                    <span style={styles.emoji}>{getEmoji(patisserie.categorie)}</span>
+                                )}
+                            </div>
                             <div style={styles.cardBody}>
                                 <h3 style={styles.cardTitle}>{patisserie.nom}</h3>
+                                <p style={styles.cardDescription}>{patisserie.description}</p>
                                 <p style={styles.cardPrice}>${patisserie.prix}</p>
-                                <button style={styles.addBtn} onClick={() => addToCart(patisserie)}>ADD TO CART</button>
+                                {/* stopPropagation empêche d'ouvrir la page détail quand on clique sur le bouton panier */}
+                                <button style={styles.addBtn} onClick={(e) => { e.stopPropagation(); addToCart(patisserie); }}>ADD TO CART</button>
                             </div>
                         </div>
                     ))}
@@ -263,7 +320,7 @@ function Footer() {
 }
 
 function getEmoji(categorie) {
-    const emojis = { 'Eclairs': '🥐', 'Tarts': '🥧', 'Macarons': '🧁', 'Cakes': '🎂', 'Cupcakes': '🧁', 'Viennoiseries': '🥐' };
+    const emojis = { 'Eclairs': '🥐', 'Tarts': '', 'Macarons': '🧁', 'Cakes': '', 'Cupcakes': '🧁', 'Viennoiseries': '🥐' };
     return emojis[categorie] || '🍰';
 }
 
@@ -288,11 +345,13 @@ const styles = {
     filterBtnActive: { backgroundColor: '#222222', color: '#ffffff', borderColor: '#222222' },
     noResults: { textAlign: 'center', padding: '60px 20px', color: '#999', fontSize: '16px' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '40px' },
-    card: { backgroundColor: '#ffffff', overflow: 'hidden', border: '1px solid #f0f0f0', transition: 'all 0.3s' },
-    cardImage: { height: '250px', backgroundColor: '#f9f9f9', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    card: { backgroundColor: '#ffffff', overflow: 'hidden', border: '1px solid #f0f0f0', transition: 'all 0.3s', cursor: 'pointer' },
+    cardImage: { height: '250px', backgroundColor: '#f9f9f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    cardImg: { width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' },
     emoji: { fontSize: '80px', opacity: 0.8 },
     cardBody: { padding: '25px', textAlign: 'center' },
     cardTitle: { fontFamily: "'Playfair Display', serif", fontSize: '20px', margin: '0 0 10px 0', color: '#222222', fontWeight: '400' },
+    cardDescription: { fontSize: '13px', color: '#777', marginBottom: '15px', lineHeight: '1.5' },
     cardPrice: { fontSize: '16px', color: '#555555', fontWeight: '400', marginBottom: '20px', letterSpacing: '1px' },
     addBtn: { backgroundColor: 'transparent', color: '#222222', border: '1px solid #222222', padding: '10px 25px', fontSize: '11px', fontWeight: '500', letterSpacing: '1.5px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.3s' },
     footer: { backgroundColor: '#ffffff', color: '#999999', textAlign: 'center', padding: '40px 20px', fontSize: '13px', borderTop: '1px solid #f0f0f0', letterSpacing: '1px' },
@@ -329,18 +388,38 @@ const styles = {
     summaryTotal: { display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e0e0e0', fontSize: '18px', fontWeight: '600' },
     successSection: { textAlign: 'center', padding: '100px 20px' },
     successTitle: { fontFamily: "'Playfair Display', serif", fontSize: '48px', marginBottom: '20px', fontWeight: '400' },
-    successText: { fontSize: '18px', color: '#777', marginBottom: '40px' }
+    successText: { fontSize: '18px', color: '#777', marginBottom: '40px' },
+
+    // --- NOUVEAUX STYLES POUR LA PAGE DÉTAIL ---
+    detailSection: { maxWidth: '1100px', margin: '60px auto', padding: '0 20px' },
+    backBtn: { background: 'none', border: 'none', fontFamily: "'Poppins', sans-serif", fontSize: '14px', color: '#777', cursor: 'pointer', marginBottom: '40px', letterSpacing: '1px' },
+    'backBtn:hover': { color: '#222' },
+    detailGrid: { display: 'flex', gap: '60px', flexWrap: 'wrap' },
+    detailImageContainer: { flex: '1', minWidth: '300px', backgroundColor: '#f9f9f9', height: '500px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    detailImg: { width: '100%', height: '100%', objectFit: 'cover' },
+    detailEmojiFallback: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
+    detailEmoji: { fontSize: '150px', opacity: 0.8 },
+    detailInfo: { flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+    detailCategory: { fontSize: '12px', color: '#999', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '15px' },
+    detailTitle: { fontFamily: "'Playfair Display', serif", fontSize: '42px', fontWeight: '400', color: '#222', margin: '0 0 20px 0', lineHeight: '1.2' },
+    detailPrice: { fontSize: '24px', color: '#555', marginBottom: '30px', fontWeight: '400' },
+    detailDescription: { fontSize: '16px', color: '#666', lineHeight: '1.8', marginBottom: '40px' },
+    detailActions: { display: 'flex', gap: '20px', alignItems: 'center' },
+    qtySelector: { display: 'flex', alignItems: 'center', border: '1px solid #e0e0e0', padding: '5px 15px' },
+    addBtnLarge: { backgroundColor: '#222222', color: 'white', border: 'none', padding: '15px 40px', fontSize: '13px', fontWeight: '500', letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.3s' }
 };
 
 const styleSheet = document.createElement("style");
 styleSheet.innerText = `
     .navLink:hover { color: #000000; }
-    .heroBtn:hover, .placeOrderBtn:hover, .checkoutBtn:hover { background-color: #444444; }
-    .card:hover { border-color: #222; transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+    .heroBtn:hover, .placeOrderBtn:hover, .checkoutBtn:hover, .addBtnLarge:hover { background-color: #444444; }
+    .product-card-clickable:hover { border-color: #222; transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+    .product-card-clickable:hover img { transform: scale(1.05); }
     .addBtn:hover, .cartBtn:hover { background-color: #222222; color: white; }
     .filterBtn:hover { border-color: #222; color: #222; }
     .searchInput:focus, .input:focus { border-color: #222; }
     .clickable-logo:hover { opacity: 0.7; }
+    .backBtn:hover { color: #222; }
 `;
 document.head.appendChild(styleSheet);
 
